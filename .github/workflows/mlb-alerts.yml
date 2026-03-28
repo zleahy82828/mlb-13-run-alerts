@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      run_mode:
+        description: "Choose live or test"
+        required: true
+        default: "test"
+        type: choice
+        options:
+          - test
+          - live
 
 jobs:
   run-alerts:
@@ -21,8 +30,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Set run mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "RUN_MODE=live" >> $GITHUB_ENV
+          else
+            echo "RUN_MODE=${{ github.event.inputs.run_mode }}" >> $GITHUB_ENV
+          fi
+
       - name: Run script
         env:
+          RUN_MODE: ${{ env.RUN_MODE }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
