@@ -285,4 +285,21 @@ def main():
         print(f"Telegram alert sent for {result['team']}")
 
 if __name__ == "__main__":
-    main()
+    send_test_alert()
+
+def send_test_alert():
+    write_google_credentials_file()
+
+    msg = (
+        "TEST ALERT\n"
+        "13-Run Baseball Pool notifier is working.\n"
+        "This is only a test message."
+    )
+
+    send_telegram_message(
+        os.environ["TELEGRAM_BOT_TOKEN"],
+        os.environ["TELEGRAM_CHAT_ID"],
+        msg
+    )
+
+    print("Test Telegram alert sent.")
