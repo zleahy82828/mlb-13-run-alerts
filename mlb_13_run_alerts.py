@@ -256,7 +256,7 @@ def run_mock_live():
     # IMPORTANT:
     # Change these values to match a REAL current-week assignment in your Google Sheet.
     mock_result = {
-        "game_pk": "MOCK-GAME-005",
+        "game_pk": "MOCK-GAME-006",
         "game_date": f"{today}T23:00:00Z",
         "team": "Boston Red Sox",
         "opponent": "Cleveland Guardians",
