@@ -295,6 +295,59 @@ def run_live():
 
         print(f"Telegram alert sent for {result['team']}")
 
+def run_mock_live():
+    sheet_id = os.environ["SPREADSHEET_ID"]
+    config = load_config()
+    assignments = load_assignments()
+
+    tz_name = config.get("timezone", "America/New_York")
+    today = get_today_in_tz(tz_name)
+    week_start = get_week_start(today)
+    week_start_str = iso_date(week_start)
+
+    # CHANGE THESE VALUES TO MATCH A REAL CURRENT-WEEK ASSIGNMENT
+    mock_result = {
+        "game_pk": "MOCK-GAME-001",
+        "game_date": f"{today}T23:00:00Z",
+        "team": "New York Yankees",
+        "opponent": "Boston Red Sox",
+        "team_runs": 13,
+        "opponent_runs": 4
+    }
+
+    participant = get_participant_for_team(assignments, week_start_str, mock_result["team"])
+    dedupe_key = f"{mock_result['game_pk']}|{normalize_team_name(mock_result['team'])}"
+
+    logged_keys = get_logged_keys(sheet_id)
+    if dedupe_key in logged_keys:
+        print(f"Already logged: {dedupe_key}")
+        return
+
+    msg = build_alert_message(mock_result, participant, week_start_str)
+
+    send_telegram_message(
+        os.environ["TELEGRAM_BOT_TOKEN"],
+        os.environ["TELEGRAM_CHAT_ID"],
+        msg
+    )
+
+    timestamp = datetime.now(ZoneInfo(tz_name)).strftime("%Y-%m-%d %H:%M:%S")
+
+    append_result_log(sheet_id, [
+        timestamp,
+        week_start_str,
+        mock_result["game_pk"],
+        mock_result["game_date"],
+        mock_result["team"],
+        mock_result["opponent"],
+        mock_result["team_runs"],
+        mock_result["opponent_runs"],
+        participant if participant else "",
+        "YES - MOCK TELEGRAM"
+    ])
+
+    print(f"Mock live alert sent for {mock_result['team']}")
+
 def main():
     write_google_credentials_file()
 
@@ -302,8 +355,7 @@ def main():
 
     if run_mode == "test":
         send_test_alert()
+    elif run_mode == "mock_live":
+        run_mock_live()
     else:
         run_live()
-
-if __name__ == "__main__":
-    main()
