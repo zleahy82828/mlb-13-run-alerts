@@ -73,19 +73,16 @@ TEAM_NAME_ALIASES = {
     "washington nationals": "Washington Nationals",
 }
 
-
 def normalize_team_name(name: str) -> str:
     if not name:
         return ""
     key = name.strip().lower()
     return TEAM_NAME_ALIASES.get(key, name.strip())
 
-
 def write_google_credentials_file():
     creds_json = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
     with open("google-service-account.json", "w", encoding="utf-8") as f:
         f.write(creds_json)
-
 
 def get_gspread_client():
     scopes = [
@@ -98,12 +95,10 @@ def get_gspread_client():
     )
     return gspread.authorize(creds)
 
-
 def get_worksheet(sheet_id: str, worksheet_name: str):
     gc = get_gspread_client()
     sh = gc.open_by_key(sheet_id)
     return sh.worksheet(worksheet_name)
-
 
 def load_csv_rows(url: str):
     response = requests.get(url, timeout=30)
@@ -111,14 +106,12 @@ def load_csv_rows(url: str):
     lines = response.text.splitlines()
     return list(csv.DictReader(lines))
 
-
 def load_config():
     rows = load_csv_rows(os.environ["CONFIG_CSV_URL"])
     config = {}
     for row in rows:
         config[row["key"].strip()] = row["value"].strip()
     return config
-
 
 def load_assignments():
     rows = load_csv_rows(os.environ["ASSIGNMENTS_CSV_URL"])
@@ -131,18 +124,14 @@ def load_assignments():
         })
     return assignments
 
-
 def get_today_in_tz(tz_name: str):
     return datetime.now(ZoneInfo(tz_name)).date()
-
 
 def get_week_start(d):
     return d - timedelta(days=d.weekday())
 
-
 def iso_date(d):
     return d.strftime("%Y-%m-%d")
-
 
 def fetch_final_games_for_date(target_date):
     params = {
@@ -177,7 +166,6 @@ def fetch_final_games_for_date(target_date):
             })
     return games
 
-
 def find_13_run_results(games):
     results = []
     for game in games:
@@ -201,14 +189,12 @@ def find_13_run_results(games):
             })
     return results
 
-
 def get_participant_for_team(assignments, week_start_str, team_name):
     normalized_team = normalize_team_name(team_name)
     for row in assignments:
         if row["week_start"] == week_start_str and normalize_team_name(row["team"]) == normalized_team:
             return row["participant"]
     return None
-
 
 def get_logged_keys(sheet_id):
     ws = get_worksheet(sheet_id, "ResultsLog")
@@ -221,11 +207,9 @@ def get_logged_keys(sheet_id):
             keys.add(f"{game_pk}|{team}")
     return keys
 
-
 def append_result_log(sheet_id, row):
     ws = get_worksheet(sheet_id, "ResultsLog")
     ws.append_row(row, value_input_option="USER_ENTERED")
-
 
 def send_telegram_message(bot_token, chat_id, body):
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -237,7 +221,6 @@ def send_telegram_message(bot_token, chat_id, body):
     response.raise_for_status()
     return response.json()
 
-
 def build_alert_message(result, participant, week_start_str):
     return (
         f"13-Run Alert\n"
@@ -246,7 +229,6 @@ def build_alert_message(result, participant, week_start_str):
         f"Owner: {participant if participant else 'NOT FOUND'}\n"
         f"Final: {result['team']} {result['team_runs']}, {result['opponent']} {result['opponent_runs']}"
     )
-
 
 def send_test_alert():
     msg = (
@@ -261,6 +243,65 @@ def send_test_alert():
     )
     print("Test Telegram alert sent.")
 
+def run_mock_live():
+    sheet_id = os.environ["SPREADSHEET_ID"]
+    config = load_config()
+    assignments = load_assignments()
+
+    tz_name = config.get("timezone", "America/New_York")
+    today = get_today_in_tz(tz_name)
+    week_start = get_week_start(today)
+    week_start_str = iso_date(week_start)
+
+    # IMPORTANT:
+    # Change these values to match a REAL current-week assignment in your Google Sheet.
+    mock_result = {
+        "game_pk": "MOCK-GAME-002",
+        "game_date": f"{today}T23:00:00Z",
+        "team": "New York Yankees",
+        "opponent": "Boston Red Sox",
+        "team_runs": 13,
+        "opponent_runs": 4
+    }
+
+    participant = get_participant_for_team(assignments, week_start_str, mock_result["team"])
+    dedupe_key = f"{mock_result['game_pk']}|{normalize_team_name(mock_result['team'])}"
+
+    print(f"Today: {today}")
+    print(f"Week start: {week_start_str}")
+    print(f"Mock team: {mock_result['team']}")
+    print(f"Participant found: {participant}")
+    print(f"Dedupe key: {dedupe_key}")
+
+    logged_keys = get_logged_keys(sheet_id)
+    if dedupe_key in logged_keys:
+        print(f"Already logged: {dedupe_key}")
+        return
+
+    msg = build_alert_message(mock_result, participant, week_start_str)
+
+    send_telegram_message(
+        os.environ["TELEGRAM_BOT_TOKEN"],
+        os.environ["TELEGRAM_CHAT_ID"],
+        msg
+    )
+
+    timestamp = datetime.now(ZoneInfo(tz_name)).strftime("%Y-%m-%d %H:%M:%S")
+
+    append_result_log(sheet_id, [
+        timestamp,
+        week_start_str,
+        mock_result["game_pk"],
+        mock_result["game_date"],
+        mock_result["team"],
+        mock_result["opponent"],
+        mock_result["team_runs"],
+        mock_result["opponent_runs"],
+        participant if participant else "",
+        "YES - MOCK TELEGRAM"
+    ])
+
+    print(f"Mock live alert sent for {mock_result['team']}")
 
 def run_live():
     sheet_id = os.environ["SPREADSHEET_ID"]
@@ -314,42 +355,17 @@ def run_live():
 
         print(f"Telegram alert sent for {result['team']}")
 
+def main():
+    write_google_credentials_file()
 
-def run_mock_live():
-    sheet_id = os.environ["SPREADSHEET_ID"]
-    config = load_config()
-    assignments = load_assignments()
+    run_mode = os.environ.get("RUN_MODE", "live").strip().lower()
 
-    tz_name = config.get("timezone", "America/New_York")
-    today = get_today_in_tz(tz_name)
-    week_start = get_week_start(today)
-    week_start_str = iso_date(week_start)
+    if run_mode == "test":
+        send_test_alert()
+    elif run_mode == "mock_live":
+        run_mock_live()
+    else:
+        run_live()
 
-    # CHANGE THESE VALUES TO MATCH A REAL CURRENT-WEEK ASSIGNMENT
-    mock_result = {
-        "game_pk": "MOCK-GAME-002",
-        "game_date": f"{today}T23:00:00Z",
-        "team": "New York Yankees",
-        "opponent": "Boston Red Sox",
-        "team_runs": 13,
-        "opponent_runs": 4
-    }
-
-    participant = get_participant_for_team(assignments, week_start_str, mock_result["team"])
-    dedupe_key = f"{mock_result['game_pk']}|{normalize_team_name(mock_result['team'])}"
-
-    print(f"Today: {today}")
-    print(f"Week start: {week_start_str}")
-    print(f"Mock team: {mock_result['team']}")
-    print(f"Participant found: {participant}")
-    print(f"Dedupe key: {dedupe_key}")
-
-    logged_keys = get_logged_keys(sheet_id)
-    if dedupe_key in logged_keys:
-        print(f"Already logged: {dedupe_key}")
-        return
-
-    msg = build_alert_message(mock_result, participant, week_start_str)
-
-    send_telegram_message(
-        os.environ["TELEGRAM_BOT_TOKEN"],
+if __name__ == "__main__":
+    main()
