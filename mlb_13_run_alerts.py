@@ -230,9 +230,20 @@ def build_alert_message(result, participant, week_start_str):
         f"Final: {result['team']} {result['team_runs']}, {result['opponent']} {result['opponent_runs']}"
     )
 
-def main():
-    write_google_credentials_file()
+def send_test_alert():
+    msg = (
+        "TEST ALERT\n"
+        "13-Run Baseball Pool notifier is working.\n"
+        "This is a manual GitHub Actions test."
+    )
+    send_telegram_message(
+        os.environ["TELEGRAM_BOT_TOKEN"],
+        os.environ["TELEGRAM_CHAT_ID"],
+        msg
+    )
+    print("Test Telegram alert sent.")
 
+def run_live():
     sheet_id = os.environ["SPREADSHEET_ID"]
     config = load_config()
     assignments = load_assignments()
@@ -284,22 +295,15 @@ def main():
 
         print(f"Telegram alert sent for {result['team']}")
 
-if __name__ == "__main__":
-    send_test_alert()
-
-def send_test_alert():
+def main():
     write_google_credentials_file()
 
-    msg = (
-        "TEST ALERT\n"
-        "13-Run Baseball Pool notifier is working.\n"
-        "This is only a test message."
-    )
+    run_mode = os.environ.get("RUN_MODE", "live").strip().lower()
 
-    send_telegram_message(
-        os.environ["TELEGRAM_BOT_TOKEN"],
-        os.environ["TELEGRAM_CHAT_ID"],
-        msg
-    )
+    if run_mode == "test":
+        send_test_alert()
+    else:
+        run_live()
 
-    print("Test Telegram alert sent.")
+if __name__ == "__main__":
+    main()
