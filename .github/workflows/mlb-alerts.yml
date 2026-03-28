@@ -4,15 +4,16 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
-    inputs:
-      run_mode:
-        description: "Choose live or test"
-        required: true
-        default: "test"
-        type: choice
-        options:
-          - test
-          - live
+  inputs:
+    run_mode:
+      description: "Choose live, test, or mock_live"
+      required: true
+      default: "test"
+      type: choice
+      options:
+        - test
+        - live
+        - mock_live
 
 jobs:
   run-alerts:
