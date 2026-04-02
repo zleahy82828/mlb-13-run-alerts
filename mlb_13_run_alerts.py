@@ -53,12 +53,14 @@ TEAM_NAME_ALIASES = {
     "a's": "Athletics",
     "phillies": "Philadelphia Phillies",
     "philadelphia phillies": "Philadelphia Phillies",
+    "philadelphia": "Philadelphia Phillies",
     "pirates": "Pittsburgh Pirates",
     "pittsburgh pirates": "Pittsburgh Pirates",
     "padres": "San Diego Padres",
     "san diego padres": "San Diego Padres",
     "giants": "San Francisco Giants",
     "san francisco giants": "San Francisco Giants",
+    "san fransico giants": "San Francisco Giants",
     "mariners": "Seattle Mariners",
     "seattle mariners": "Seattle Mariners",
     "cardinals": "St. Louis Cardinals",
@@ -118,11 +120,34 @@ def load_assignments():
     assignments = []
     for row in rows:
         assignments.append({
-            "week_start": row["week_start"].strip(),
+            "week_start": normalize_week_start(row["week_start"]),
             "team": normalize_team_name(row["team"]),
             "participant": row["participant"].strip()
         })
     return assignments
+
+def normalize_week_start(date_str: str) -> str:
+    date_str = date_str.strip()
+
+    # Already in YYYY-MM-DD
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+
+    # M/D/YYYY
+    try:
+        return datetime.strptime(date_str, "%m/%d/%Y").strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+
+    # M/D/YY
+    try:
+        return datetime.strptime(date_str, "%m/%d/%y").strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+
+    return date_str
 
 def get_today_in_tz(tz_name: str):
     return datetime.now(ZoneInfo(tz_name)).date()
@@ -191,8 +216,10 @@ def find_13_run_results(games):
 
 def get_participant_for_team(assignments, week_start_str, team_name):
     normalized_team = normalize_team_name(team_name)
+    normalized_week = normalize_week_start(week_start_str)
+
     for row in assignments:
-        if row["week_start"] == week_start_str and normalize_team_name(row["team"]) == normalized_team:
+        if row["week_start"] == normalized_week and normalize_team_name(row["team"]) == normalized_team:
             return row["participant"]
     return None
 
@@ -253,13 +280,11 @@ def run_mock_live():
     week_start = get_week_start(today)
     week_start_str = iso_date(week_start)
 
-    # IMPORTANT:
-    # Change these values to match a REAL current-week assignment in your Google Sheet.
     mock_result = {
-        "game_pk": "MOCK-GAME-006",
+        "game_pk": "MOCK-GAME-004",
         "game_date": f"{today}T23:00:00Z",
-        "team": "Boston Red Sox",
-        "opponent": "Cleveland Guardians",
+        "team": "New York Yankees",
+        "opponent": "Boston Red Sox",
         "team_runs": 13,
         "opponent_runs": 4
     }
@@ -310,21 +335,36 @@ def run_live():
 
     tz_name = config.get("timezone", "America/New_York")
     today = get_today_in_tz(tz_name)
-    week_start = get_week_start(today)
-    week_start_str = iso_date(week_start)
+    yesterday = today - timedelta(days=1)
 
-    games = fetch_final_games_for_date(today)
-    results = find_13_run_results(games)
+    print(f"Checking dates: {yesterday} and {today}")
+
+    games_today = fetch_final_games_for_date(today)
+    games_yesterday = fetch_final_games_for_date(yesterday)
+
+    all_games = games_yesterday + games_today
+    results = find_13_run_results(all_games)
 
     if not results:
-        print("No final games with exactly 13 runs today.")
+        print("No final games with exactly 13 runs found across today and yesterday.")
         return
 
     logged_keys = get_logged_keys(sheet_id)
 
     for result in results:
+        game_dt = datetime.fromisoformat(result["game_date"].replace("Z", "+00:00"))
+        local_game_date = game_dt.astimezone(ZoneInfo(tz_name)).date()
+        week_start = get_week_start(local_game_date)
+        week_start_str = iso_date(week_start)
+
         participant = get_participant_for_team(assignments, week_start_str, result["team"])
         dedupe_key = f"{result['game_pk']}|{normalize_team_name(result['team'])}"
+
+        print(f"Processing result: {result['team']} scored 13 in game {result['game_pk']}")
+        print(f"Local game date: {local_game_date}")
+        print(f"Calculated week start: {week_start_str}")
+        print(f"Participant found: {participant}")
+        print(f"Dedupe key: {dedupe_key}")
 
         if dedupe_key in logged_keys:
             print(f"Already logged: {dedupe_key}")
